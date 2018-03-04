@@ -1,4 +1,3 @@
-
 #include <iostream>
 #include <stdio.h>
 #include <unistd.h>
@@ -8,15 +7,15 @@
 #include <stdint.h>
 
 #define MAX_BUFFER_SIZE         512
-char readBuf[MAX_BUFFER_SIZE];
+unsigned char readBuf[MAX_BUFFER_SIZE];
 
 #define NUM_MESSAGES            10000
 #define DEVICE_NAME             "/dev/rpmsg_pru30"
 
-
 using namespace std;
 
-int main() {
+int main()
+{
     cout << "pru-i2c-arm started" << endl; // prints !!!Hello World!!!
     struct pollfd pollfds[1];
     int i;
@@ -31,42 +30,103 @@ int main() {
      * Make sure the PRU firmware is loaded and that the rpmsg_pru
      * module is inserted.
      */
-    if (pollfds[0].fd < 0) {
-            printf("Failed to open %s\n", DEVICE_NAME);
-            return -1;
+    if (pollfds[0].fd < 0)
+    {
+        printf("Failed to open %s\n", DEVICE_NAME);
+        return -1;
     }
 
     /* The RPMsg channel exists and the character device is opened */
     printf("Opened %s, sending %d messages\n\n", DEVICE_NAME, NUM_MESSAGES);
 
     /* Send 'hello world!' to the PRU through the RPMsg channel */
-    result = write(pollfds[0].fd, "START", 6);
+    result = write(pollfds[0].fd, "ST", 3);
     if (result > 0)
-            printf("Message START sent to PRU\n");
-
-    result = read(pollfds[0].fd, readBuf, 8);
-    if (result > 0)
-            printf("Message received from PRU:%s\n\n", readBuf);
-
-    struct EcapData
     {
-        char cmd[8];
-        uint32_t reg1;
-        uint32_t reg2;
-        uint32_t reg3;
-        uint32_t reg4;
-    };
-    printf("Sizeof struct: %d ", sizeof(struct EcapData));
+        printf("Message START sent to PRU\n");
+    }
+    else
+    {
+        printf("Sorry!! cannot send message START sent to PRU\n");
+        close(pollfds[0].fd);
+        return -1;
+    }
+    result = read(pollfds[0].fd, readBuf, 3);
+    if (result > 0)
+    {
+        printf("Received %s from PRU\n", readBuf);
+    }
+    else
+    {
+        printf("Sorry!! cannot receive confirm on START from PRU\n");
+        close(pollfds[0].fd);
+        return -1;
+    }
 
-    for (i = 0; i < NUM_MESSAGES; i++) {
-        result = read(pollfds[0].fd, readBuf, sizeof(struct EcapData));
-        struct EcapData *data = (struct EcapData *) readBuf;
-            uint32_t reg1 = data->reg1;
-            uint32_t reg2 = data->reg2;
-            uint32_t reg3 = data->reg3;
-            uint32_t reg4 = data->reg4;
-            if (result > 0)
-                    printf("Message received from PRU:%s, 1-%lu, 2-%lu, 3-%lu, 4-%lu\n", data->cmd, (unsigned long)reg1, (unsigned long)reg2, (unsigned long)reg3, (unsigned long)reg4);
+    for (i = 0; i < NUM_MESSAGES; i++)
+    {
+        {
+            uint16_t j;
+            for (j = 0; j < MAX_BUFFER_SIZE; j++)
+            {
+                readBuf[j] = '\0';
+            }
+        }
+        result = read(pollfds[0].fd, readBuf, MAX_BUFFER_SIZE);
+        if (result > 0)
+        {
+            if (readBuf[0] == 'T')
+            {
+                if (readBuf[1] == 'T')
+                {
+                    printf("Received %s from PRU\n", readBuf);
+                }
+                else
+                {
+                    printf("Received KO message from PRU [%s]\n", readBuf);
+                }
+            }
+            else if (readBuf[0] == 'H')
+            {
+                if (readBuf[1] == 'T')
+                {
+                    printf("Received %s from PRU\n", readBuf);
+                }
+                else if (readBuf[1] == 'D')
+                {
+                    uint16_t values[3] = {0,0,0};
+                    uint16_t* valBuf = (uint16_t*)(readBuf + 2);
+                    values[0] = (0xFF00 & ((*valBuf) << 8)) | (0x00FF & ((*valBuf) >> 8));
+                    values[1] = (0xFF00 & ((*(valBuf+1)) << 8)) | (0x00FF & ((*(valBuf+1)) >> 8));
+                    values[2] = (0xFF00 & ((*(valBuf+2)) << 8)) | (0x00FF & ((*(valBuf+2)) >> 8));
+                    printf("Received %c%c X=[%d], Y=[%d] Z=[%d] from PRU\n",
+                           readBuf[0], readBuf[1], (int16_t)values[0], (int16_t)values[1],
+                           (int16_t)values[2]);
+                }
+                else if (readBuf[1] == 'S')
+                {
+                    uint16_t values[3] = {0,0,0};
+                    uint16_t* valBuf = (uint16_t*)(readBuf + 2);
+                    values[0] = (0xFF00 & ((*valBuf) << 8)) | (0x00FF & ((*valBuf) >> 8));
+                    values[1] = (0xFF00 & ((*(valBuf+1)) << 8)) | (0x00FF & ((*(valBuf+1)) >> 8));
+                    values[2] = (0xFF00 & ((*(valBuf+2)) << 8)) | (0x00FF & ((*(valBuf+2)) >> 8));
+                    printf("SelfTests %c%c X=[%d], Y=[%d] Z=[%d] from PRU\n",
+                           readBuf[0], readBuf[1], (int16_t)values[0], (int16_t)values[1],
+                           (int16_t)values[2]);
+                }
+                else
+                {
+                    printf("Received KO message from PRU [%s]\n", readBuf);
+                }
+            }
+            else
+            {
+                printf("Sorry!! cannot invalid message format from PRU. [%s]\n",
+                       readBuf);
+                close(pollfds[0].fd);
+                return -1;
+            }
+        }
     }
     /* Received all the messages the example is complete */
     printf("Received %d messages, closing %s\n", NUM_MESSAGES, DEVICE_NAME);
@@ -76,5 +136,4 @@ int main() {
 
     return 0;
 }
-
 
