@@ -18,7 +18,6 @@ int main()
 {
     cout << "pru-i2c-arm started" << endl; // prints !!!Hello World!!!
     struct pollfd pollfds[1];
-    int i;
     int result = 0;
 
     /* Open the rpmsg_pru character device file */
@@ -62,9 +61,10 @@ int main()
         close(pollfds[0].fd);
         return -1;
     }
-
-    for (i = 0; i < NUM_MESSAGES; i++)
+    int16_t counter = -1;
+    while (1)
     {
+        counter == 1000 ? counter = 0 : counter++;
         {
             uint16_t j;
             for (j = 0; j < MAX_BUFFER_SIZE; j++)
@@ -73,7 +73,7 @@ int main()
             }
         }
         result = read(pollfds[0].fd, readBuf, MAX_BUFFER_SIZE);
-        if (result > 0)
+        if (result > 0 && (counter == 0))
         {
             if (readBuf[0] == 'T')
             {
@@ -85,12 +85,39 @@ int main()
                 {
                     printf("Received KO message from PRU [%s]\n", readBuf);
                 }
+            } else if (readBuf[0] == 'M')
+            {
+                if (readBuf[1] == 'P')
+                {
+                    printf("Received %s from PRU\n", readBuf);
+                } else if (readBuf[1] == '6')
+                {
+                    uint16_t* values = (uint16_t*)(readBuf + 2);
+                    printf("Received %c%c ax=[%d], ay=[%d] az=[%d], gx=[%d], gy=[%d] gz=[%d] from PRU\n",
+                           readBuf[0], readBuf[1], (int16_t)values[0], (int16_t)values[1],
+                           (int16_t)values[2], (int16_t)values[3], (int16_t)values[4],
+                           (int16_t)values[5]);
+                }
+               else
+                {
+                    printf("Received KO message from PRU [%s]\n", readBuf);
+                }
             }
             else if (readBuf[0] == 'H')
             {
                 if (readBuf[1] == 'T')
                 {
-                    printf("Received %s from PRU\n", readBuf);
+                    if(readBuf[2] == 'K') {
+                        uint32_t values[3] = {0,0,0};
+                        values[0] = *((uint32_t*)(readBuf + 4));
+                        values[1] = *((uint32_t*)(readBuf + 8));
+                        values[2] = *((uint32_t*)(readBuf + 12));
+                        printf("Received %c%c%c A=[%lu], B=[%lu] C=[%lu] from PRU\n",
+                               readBuf[0], readBuf[1], readBuf[2], (unsigned long)values[0], (unsigned long)values[1],
+                               (unsigned long)values[2]);
+                    } else {
+                        printf("Received %s from PRU\n", readBuf);
+                    }
                 }
                 else if (readBuf[1] == 'D')
                 {
