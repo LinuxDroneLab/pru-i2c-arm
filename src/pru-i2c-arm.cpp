@@ -5,12 +5,13 @@
 #include <string.h>
 #include <sys/poll.h>
 #include <stdint.h>
+#include <sys/time.h>
 
 #define MAX_BUFFER_SIZE         512
 unsigned char readBuf[MAX_BUFFER_SIZE];
 
 #define NUM_MESSAGES            10000
-#define DEVICE_NAME             "/dev/rpmsg_pru30"
+#define DEVICE_NAME             "/dev/mpu-605030"
 
 using namespace std;
 
@@ -62,6 +63,11 @@ int main()
         return -1;
     }
     int16_t counter = -1;
+    struct  timeval now; // wall clock times
+    struct  timeval later;
+    gettimeofday(&now, NULL); // wall clock time when CPU time first read
+    gettimeofday(&later, NULL); // wall clock time when CPU time has ticked
+    uint32_t usec;
     while (1)
     {
         counter == 1000 ? counter = 0 : counter++;
@@ -92,11 +98,15 @@ int main()
                     printf("Received %s from PRU\n", readBuf);
                 } else if (readBuf[1] == '6')
                 {
+
+                    gettimeofday(&later, NULL); // wall clock time when CPU time has ticked
+                    usec = (((unsigned long long)later.tv_sec) * 1000000ULL + later.tv_usec) - (((unsigned long long)now.tv_sec) * 1000000ULL + now.tv_usec);
                     uint16_t* values = (uint16_t*)(readBuf + 2);
-                    printf("Received %c%c ax=[%d], ay=[%d] az=[%d], gx=[%d], gy=[%d] gz=[%d] from PRU\n",
-                           readBuf[0], readBuf[1], (int16_t)values[0], (int16_t)values[1],
+                    printf("used=%d Received %c%c ax=[%d], ay=[%d] az=[%d], gx=[%d], gy=[%d] gz=[%d] from PRU\n",
+                           usec, readBuf[0], readBuf[1], (int16_t)values[0], (int16_t)values[1],
                            (int16_t)values[2], (int16_t)values[3], (int16_t)values[4],
                            (int16_t)values[5]);
+                    gettimeofday(&now, NULL); // wall clock time when CPU time first read
                 }
                else
                 {
